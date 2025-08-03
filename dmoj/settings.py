@@ -393,25 +393,8 @@ LOCALE_PATHS = [
 ]
 
 LANGUAGES = [
-    ('ca', _('Catalan')),
-    ('de', _('German')),
-    ('el', _('Greek')),
     ('en', _('English')),
-    ('es', _('Spanish')),
-    ('fr', _('French')),
-    ('hr', _('Croatian')),
-    ('hu', _('Hungarian')),
-    ('ja', _('Japanese')),
-    ('kk', _('Kazakh')),
-    ('ko', _('Korean')),
-    ('pt', _('Brazilian Portuguese')),
-    ('ro', _('Romanian')),
-    ('ru', _('Russian')),
-    ('sr-latn', _('Serbian (Latin)')),
-    ('tr', _('Turkish')),
     ('vi', _('Vietnamese')),
-    ('zh-hans', _('Simplified Chinese')),
-    ('zh-hant', _('Traditional Chinese')),
 ]
 
 BLEACH_USER_SAFE_TAGS = [
