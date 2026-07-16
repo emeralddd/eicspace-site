@@ -211,27 +211,63 @@
                 window.scrollBy(0, $tr.height());
                 return false;
             });
+            
+            // Autofill input and output files based on the order of the input files
+            function autofill_by_files($rows, files) {
+                $.each(files, function (index, file) {
+                    var $tr = $rows.eq(index);
+                    // If there are more files than rows, create new rows as needed
+                    if (!$tr.length) {
+                        $tr = create_case_row();
+                        $rows = $table.find('tbody:first tr');
+                    }
 
+                    // Make it type as normal case, if it is already a Batch start or Batch end
+                    if ($tr.attr('data-type') !== 'C') {
+                        $tr.find('select[id$=type]').val('C').trigger('change');
+                    }
+
+                    $tr.find('input[name$="DELETE"]').prop('checked', false);
+                    $tr.find('select[id$=input_file]').val(file).trigger('change');
+                    // Delete old output file if it exists, so that we can autofill the new one
+                    $tr.find('select[id$=output_file]').val('').trigger('change');
+                    autofill_input_to_output($tr, file);
+                });
+
+                // If there are more rows than files, mark the extra rows for deletion
+                $rows.slice(files.length).each(function () {
+                    $(this).find('input[name$="DELETE"]').prop('checked', true);
+                });
+
+                return false;
+            }
+
+            // Autofill input and output files based on the order of the input files (number-only-ordered autofill)
+            // i.e., 1.in, 2.in, 10.in instead of 1.in, 10.in, 2.in
+            $('a#number-auto-fill').click(function () {
+                var $rows = $table.find('tbody:first tr');
+                var files = $.grep(window.valid_files, function (file) {
+                    return /\.(?:in|inp)$/.test(file);
+                }).sort(function (a, b) {
+                    // Get the numeric part of the filename and compare them as integers
+                    var a_num = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+                    var b_num = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+                    return a_num - b_num;
+                });
+
+                autofill_by_files($rows, files);
+
+                return false;
+            })
+
+            // Autofill input and output files based on the order of the input files (normal autofill)
             $('#auto-fill').click(function () {
                 var $rows = $table.find('tbody:first tr');
                 var files = $.grep(window.valid_files, function (file) {
                     return /\.(?:in|inp)$/.test(file);
                 });
 
-                $.each(files, function (index, file) {
-                    var $tr = $rows.eq(index);
-                    if (!$tr.length) {
-                        $tr = create_case_row();
-                        $rows = $table.find('tbody:first tr');
-                    }
-
-                    $tr.find('input[name$="DELETE"]').prop('checked', false);
-                    $tr.find('select[id$=input_file]').val(file).trigger('change');
-                });
-
-                $rows.slice(files.length).each(function () {
-                    $(this).find('input[name$="DELETE"]').prop('checked', true);
-                });
+                autofill_by_files($rows, files);
 
                 return false;
             });
@@ -418,9 +454,11 @@
                 <input type="checkbox" data-suffix="batch_dependencies">
                 {{ _('Batch dependencies') }}
             </label>
-            <a id="auto-fill" href="#"><i class="fa fa-pencil"></i> Autofill </a>
         </div>
 
+        <a id="auto-fill" href="#"><i class="fa fa-pencil"></i> Autofill </a>
+
+        <a id="number-auto-fill" href="#"><i class="fa fa-pencil"></i> Number-only-ordered autofill </a>
 
         <table id="case-table" class="table">
             <thead>
