@@ -11,6 +11,16 @@
                     $select.val(file).trigger('change');
             }
 
+            function autofill_input_to_output($tr, file) {
+                autofill_if_exists($tr.find('select[id$=output_file]'), file.replace(/\.(?:in|inp)$/, '.out'));
+            }
+
+            function autofill_output_to_input($tr, file) {
+                var base = file.replace(/\.out$/, '');
+                autofill_if_exists($tr.find('select[id$=input_file]'), base + '.in');
+                autofill_if_exists($tr.find('select[id$=input_file]'), base + '.inp');
+            }
+
             var $table = $('#case-table');
             $table.on('add-row', function (e, $tr) {
                 $tr.find('input').filter('[id$=file]').each(function () {
@@ -28,9 +38,9 @@
                         var val = $select.val();
                         if (val) {
                             if ($select.attr('id').endsWith('input_file'))
-                                autofill_if_exists($tr.find('select[id$=output_file]'), val.replace(/in(?!.*?in)/, 'out'));
+                                autofill_input_to_output($tr, val);
                             else
-                                autofill_if_exists($tr.find('select[id$=input_file]'), val.replace(/out(?!.*?out)/, 'in'));
+                                autofill_output_to_input($tr, val);
                         }
                     });
                 });
@@ -186,14 +196,43 @@
 
             var $total = $('#id_cases-TOTAL_FORMS');
 
-            $('a#add-case-row').click(function () {
+            function create_case_row() {
                 var $tr;
                 $table.find('tbody:first').append($tr = $($table.find('.extra-row-body').html()
                     .replace(/__prefix__/g, $total.val())));
                 $tr.find('.type-column select option[value="C"]').attr('selected', true);
                 $total.val(parseInt($total.val()) + 1);
                 $table.trigger('add-row', [$tr]);
+                return $tr;
+            }
+
+            $('a#add-case-row').click(function () {
+                var $tr = create_case_row();
                 window.scrollBy(0, $tr.height());
+                return false;
+            });
+
+            $('#auto-fill').click(function () {
+                var $rows = $table.find('tbody:first tr');
+                var files = $.grep(window.valid_files, function (file) {
+                    return /\.(?:in|inp)$/.test(file);
+                });
+
+                $.each(files, function (index, file) {
+                    var $tr = $rows.eq(index);
+                    if (!$tr.length) {
+                        $tr = create_case_row();
+                        $rows = $table.find('tbody:first tr');
+                    }
+
+                    $tr.find('input[name$="DELETE"]').prop('checked', false);
+                    $tr.find('select[id$=input_file]').val(file).trigger('change');
+                });
+
+                $rows.slice(files.length).each(function () {
+                    $(this).find('input[name$="DELETE"]').prop('checked', true);
+                });
+
                 return false;
             });
 
@@ -379,7 +418,10 @@
                 <input type="checkbox" data-suffix="batch_dependencies">
                 {{ _('Batch dependencies') }}
             </label>
+            <a id="auto-fill" href="#"><i class="fa fa-pencil"></i> Autofill </a>
         </div>
+
+
         <table id="case-table" class="table">
             <thead>
             <tr>
