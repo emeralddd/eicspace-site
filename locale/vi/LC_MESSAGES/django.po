@@ -3840,7 +3840,7 @@ msgstr "Trang web này hoạt động tốt nhất khi JavaScript được cho p
 
 #: templates/base.html:293
 msgid "proudly powered by **DMOJ**"
-msgstr "dựa trên nền tảng **DMOJ**"
+msgstr "dựa trên nền tảng **DMOJ** và duy trì phát triển bởi **EICSpace**"
 
 #: templates/blog/content.html:13 templates/comments/list.html:89
 #: templates/comments/list.html:105 templates/contest/contest-tabs.html:23

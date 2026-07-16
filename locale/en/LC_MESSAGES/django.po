@@ -3950,7 +3950,7 @@ msgstr ""
 
 #: templates/base.html:293
 msgid "proudly powered by **DMOJ**"
-msgstr ""
+msgstr "proudly powered by **DMOJ** and maintained by **EICSpace**"
 
 #: templates/blog/content.html:13 templates/comments/list.html:89
 #: templates/comments/list.html:105 templates/contest/contest-tabs.html:23
