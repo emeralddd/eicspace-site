@@ -386,3 +386,8 @@ if 'newsletter' in settings.INSTALLED_APPS:
     urlpatterns.append(path('newsletter/', include('newsletter.urls')))
 if 'impersonate' in settings.INSTALLED_APPS:
     urlpatterns.append(path('impersonate/', include('impersonate.urls')))
+
+from django.conf.urls.static import static
+
+if settings.DEBUG:
+    urlpatterns.extend(static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT))
