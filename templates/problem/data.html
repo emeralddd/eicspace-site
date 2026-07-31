@@ -203,6 +203,7 @@
                 $tr.find('.type-column select option[value="C"]').attr('selected', true);
                 $total.val(parseInt($total.val()) + 1);
                 $table.trigger('add-row', [$tr]);
+                $tr.find('input[id$=points]').val(1); // Default points to 1 for new cases
                 return $tr;
             }
 
