@@ -447,6 +447,9 @@
         {% if custom_checker_exists %}
             <p id="custom-checker-installed" style="display: none">
                 {{ _('Custom checker installed:') }} <code>checker.py</code>
+                <a class="button" href="{{ url('problem_data_file', problem.code, 'checker.py') }}">
+                    <i class="fa fa-download"></i> {{ _('Download checker') }}
+                </a>
             </p>
         {% endif %}
         <table class="table">{{ data_form.as_table() }}</table>
