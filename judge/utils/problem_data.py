@@ -205,7 +205,12 @@ class ProblemDataCompiler(object):
             hints.append('unicode')
         if self.data.nobigmath:
             hints.append('nobigmath')
-        if problem_data_storage.exists(os.path.join(self.problem.code, 'checker.py')):
+        if problem_data_storage.exists(os.path.join(self.problem.code, 'checker.cpp')):
+            init['checker'] = {
+                'name': 'bridged',
+                'args': json.loads(self.data.checker_args),
+            }
+        elif problem_data_storage.exists(os.path.join(self.problem.code, 'checker.py')):
             init['checker'] = make_checker(self.data, 'checker.py')
         elif self.data.checker:
             init['checker'] = make_checker(self.data)

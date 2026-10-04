@@ -6,9 +6,14 @@ from django.utils.translation import gettext_lazy as _
 
 from judge.utils.problem_data import ProblemDataStorage
 
-__all__ = ['problem_data_storage', 'problem_directory_file', 'ProblemData', 'ProblemTestCase', 'CHECKERS']
+__all__ = [
+    'problem_data_storage', 'problem_directory_file', 'ProblemData', 'ProblemTestCase', 'CHECKERS',
+    'CUSTOM_CHECKER_PY', 'CUSTOM_CHECKER_CPP',
+]
 
 problem_data_storage = ProblemDataStorage()
+CUSTOM_CHECKER_PY = 'custom_py'
+CUSTOM_CHECKER_CPP = 'custom_cpp'
 
 
 def _problem_directory_file(code, filename):

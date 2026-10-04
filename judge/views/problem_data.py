@@ -9,7 +9,8 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.forms import BaseModelFormSet, FileField, HiddenInput, ModelForm, NumberInput, Select, formset_factory
+from django.forms import BaseModelFormSet, CharField, ChoiceField, FileField, HiddenInput, ModelForm, NumberInput, \
+    Select, formset_factory
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -19,7 +20,8 @@ from django.utils.translation import gettext as _
 from django.views.generic import DetailView
 
 from judge.highlight_code import highlight_code
-from judge.models import Problem, ProblemData, ProblemTestCase, Submission, problem_data_storage
+from judge.models import CUSTOM_CHECKER_CPP, CUSTOM_CHECKER_PY, Problem, ProblemData, ProblemTestCase, Submission, \
+    problem_data_storage
 from judge.utils.problem_data import ProblemDataCompiler
 from judge.utils.unicode import utf8text
 from judge.utils.views import TitleMixin, add_file_response
@@ -27,8 +29,6 @@ from judge.views.problem import ProblemMixin
 
 mimetypes.init()
 mimetypes.add_type('application/x-yaml', '.yml')
-
-CUSTOM_CHECKER = 'custom_py'
 
 
 def checker_args_cleaner(self):
@@ -45,37 +45,111 @@ def checker_args_cleaner(self):
 
 class ProblemDataForm(ModelForm):
     checker_file = FileField(
-        label=_('Custom checker file'),
-        help_text=_('Upload a Python checker module (.py). It will be saved as checker.py.'),
+        label=_('Custom checker source file'),
+        help_text=_('Upload a checker source file for the selected custom checker.'),
         required=False,
     )
+    checker_type = ChoiceField(
+        label=_('Custom checker type'),
+        choices=(
+            ('testlib', 'testlib'),
+            ('themis', 'themis'),
+        ),
+        required=False,
+    )
+    input_name = CharField(label=_('Input name'), required=False)
+    output_name = CharField(label=_('Output name'), required=False)
 
     def __init__(self, *args, **kwargs):
         super(ProblemDataForm, self).__init__(*args, **kwargs)
         choices = list(self.fields['checker'].choices)
-        choices.append((CUSTOM_CHECKER, _('Custom checker (PY)')))
+        choices.extend((
+            (CUSTOM_CHECKER_PY, _('Custom checker (PY)')),
+            (CUSTOM_CHECKER_CPP, _('Custom checker (CPP)')),
+        ))
         self.fields['checker'].choices = choices
-        self.fields['checker_file'].widget.attrs['accept'] = '.py'
-        if not self.is_bound and self.instance.pk and problem_data_storage.exists(
-            os.path.join(self.instance.problem.code, 'checker.py'),
-        ):
-            self.initial['checker'] = CUSTOM_CHECKER
+        self.order_fields([
+            'zipfile', 'generator', 'unicode', 'nobigmath', 'output_limit', 'output_prefix',
+            'checker', 'checker_type', 'input_name', 'output_name', 'checker_file', 'checker_args',
+        ])
+        if not self.is_bound and self.instance.pk:
+            checker_py_exists = problem_data_storage.exists(
+                os.path.join(self.instance.problem.code, 'checker.py'),
+            )
+            checker_cpp_exists = problem_data_storage.exists(
+                os.path.join(self.instance.problem.code, 'checker.cpp'),
+            )
+            if checker_cpp_exists:
+                self.initial['checker'] = CUSTOM_CHECKER_CPP
+            elif checker_py_exists:
+                self.initial['checker'] = CUSTOM_CHECKER_PY
+
+            if self.initial.get('checker') == CUSTOM_CHECKER_CPP:
+                self.fields['checker_file'].widget.attrs['accept'] = '.cpp'
+                try:
+                    checker_args = json.loads(self.instance.checker_args or '{}')
+                except ValueError:
+                    checker_args = {}
+                self.initial['checker_type'] = checker_args.get('type', '')
+                self.initial['input_name'] = checker_args.get('input_name', '')
+                self.initial['output_name'] = checker_args.get('output_name', '')
+            else:
+                self.fields['checker_file'].widget.attrs['accept'] = '.py'
 
     def clean(self):
         cleaned_data = super(ProblemDataForm, self).clean()
         checker_file = cleaned_data.get('checker_file')
-        use_custom_checker = cleaned_data.get('checker') == CUSTOM_CHECKER
-        self.use_custom_checker = use_custom_checker
-
-        if use_custom_checker:
-            checker_exists = problem_data_storage.exists(
+        checker = cleaned_data.get('checker')
+        self.selected_checker = checker
+        if checker == CUSTOM_CHECKER_PY:
+            if not checker_file and not problem_data_storage.exists(
                 os.path.join(self.instance.problem.code, 'checker.py'),
-            )
-            if not checker_file and not checker_exists:
+            ):
                 self.add_error('checker_file', _('Upload a Python checker file to use the custom checker.'))
+            if checker_file and not checker_file.name.lower().endswith('.py'):
+                self.add_error('checker_file', _('Python checker files must end in .py.'))
+            cleaned_data['checker_args'] = ''
+            cleaned_data['checker'] = 'standard'
+        elif checker == CUSTOM_CHECKER_CPP:
+            if not checker_file and not problem_data_storage.exists(
+                os.path.join(self.instance.problem.code, 'checker.cpp'),
+            ):
+                self.add_error('checker_file', _('Upload a C++ checker file to use the custom checker.'))
+            if checker_file and not checker_file.name.lower().endswith(('.cc', '.cpp', '.cxx')):
+                self.add_error('checker_file', _('C++ checker files must end in .cc, .cpp, or .cxx.'))
+
+            checker_type = cleaned_data.get('checker_type')
+            checker_args = {}
+            if not checker_type:
+                self.add_error('checker_type', _('Select a custom checker type.'))
+            else:
+                checker_args = {
+                    'files': 'checker.cpp',
+                    'lang': 'CPP17',
+                    'type': checker_type,
+                }
+                if checker_type == 'themis':
+                    input_name = (cleaned_data.get('input_name') or '').strip()
+                    output_name = (cleaned_data.get('output_name') or '').strip()
+                    if not input_name:
+                        self.add_error('input_name', _('Input name is required for Themis checkers.'))
+                    if not output_name:
+                        self.add_error('output_name', _('Output name is required for Themis checkers.'))
+                    checker_args['input_name'] = input_name
+                    checker_args['output_name'] = output_name
+            cleaned_data['checker_args'] = json.dumps(checker_args)
             cleaned_data['checker'] = 'standard'
         elif checker_file:
-            self.add_error('checker_file', _('Select Custom checker (PY) before uploading a checker file.'))
+            self.add_error('checker_file', _('Select a custom checker before uploading a checker file.'))
+
+        if checker not in (CUSTOM_CHECKER_PY, CUSTOM_CHECKER_CPP):
+            checker_args = cleaned_data.get('checker_args') or ''
+            try:
+                parsed_checker_args = json.loads(checker_args) if checker_args else {}
+            except ValueError:
+                parsed_checker_args = {}
+            if parsed_checker_args.get('files') == 'checker.cpp':
+                cleaned_data['checker_args'] = ''
         return cleaned_data
 
     def clean_zipfile(self):
@@ -95,18 +169,12 @@ class ProblemDataForm(ModelForm):
 
         return generator
 
-    def clean_checker_file(self):
-        checker_file = self.cleaned_data['checker_file']
-        if checker_file and not checker_file.name.lower().endswith('.py'):
-            raise ValidationError(_('Custom checker files must be Python files ending in .py.'))
-        return checker_file
-
     clean_checker_args = checker_args_cleaner
 
     class Meta:
         model = ProblemData
         fields = ['zipfile', 'generator', 'unicode', 'nobigmath', 'output_limit', 'output_prefix',
-                  'checker', 'checker_args']
+                  'checker', 'checker_type', 'input_name', 'output_name', 'checker_file', 'checker_args']
         widgets = {
             'checker_args': HiddenInput,
         }
@@ -234,8 +302,11 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
                 valid_files = self.get_valid_files(context['data_form'].instance)
             except BadZipfile:
                 pass
-        context['custom_checker_exists'] = problem_data_storage.exists(
+        context['custom_checker_py_exists'] = problem_data_storage.exists(
             os.path.join(self.object.code, 'checker.py'),
+        )
+        context['custom_checker_cpp_exists'] = problem_data_storage.exists(
+            os.path.join(self.object.code, 'checker.cpp'),
         )
         context['valid_files'] = set(valid_files)
         context['valid_files_json'] = mark_safe(json.dumps(valid_files))
@@ -257,12 +328,20 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
         cases_formset = self.get_case_formset(valid_files, post=True)
         if data_form.is_valid() and cases_formset.is_valid():
             data = data_form.save()
-            checker_path = os.path.join(problem.code, 'checker.py')
             checker_file = data_form.cleaned_data['checker_file']
-            if data_form.use_custom_checker and checker_file:
+            if data_form.selected_checker == CUSTOM_CHECKER_PY:
+                problem_data_storage.delete(os.path.join(problem.code, 'checker.cpp'))
+                checker_path = os.path.join(problem.code, 'checker.py')
+            elif data_form.selected_checker == CUSTOM_CHECKER_CPP:
+                problem_data_storage.delete(os.path.join(problem.code, 'checker.py'))
+                checker_path = os.path.join(problem.code, 'checker.cpp')
+            else:
+                problem_data_storage.delete(os.path.join(problem.code, 'checker.py'))
+                problem_data_storage.delete(os.path.join(problem.code, 'checker.cpp'))
+                checker_path = None
+
+            if checker_file and checker_path:
                 problem_data_storage.save(checker_path, checker_file)
-            elif not data_form.use_custom_checker:
-                problem_data_storage.delete(checker_path)
             for case in cases_formset.save(commit=False):
                 case.dataset_id = problem.id
                 case.save()

@@ -88,14 +88,27 @@
                 }).appendTo($td);
 
                 $checker.change(function () {
+                    if ($checker.val() === 'custom_py' || $checker.val() === 'custom_cpp') {
+                        $precision.hide();
+                        return;
+                    }
                     $precision.toggle($checker.val().startsWith('floats')).change();
                 }).change();
             }
 
             function toggle_custom_checker_upload() {
-                var use_custom_checker = $('#id_problem-data-checker').val() === 'custom_py';
-                $('#id_problem-data-checker_file').closest('tr').toggle(use_custom_checker);
-                $('#custom-checker-installed').toggle(use_custom_checker);
+                var checker = $('#id_problem-data-checker').val();
+                var use_custom_python = checker === 'custom_py';
+                var use_custom_cpp = checker === 'custom_cpp';
+                var custom_type = $('#id_problem-data-checker_type').val();
+
+                $('#id_problem-data-checker_file').closest('tr').toggle(use_custom_python || use_custom_cpp);
+                $('#id_problem-data-checker_file').attr('accept', use_custom_cpp ? '.cc,.cpp,.cxx' : '.py');
+                $('#id_problem-data-checker_type').closest('tr').toggle(use_custom_cpp);
+                $('#id_problem-data-input_name').closest('tr').toggle(use_custom_cpp && custom_type === 'themis');
+                $('#id_problem-data-output_name').closest('tr').toggle(use_custom_cpp && custom_type === 'themis');
+                $('#custom-checker-py-installed').toggle(use_custom_python);
+                $('#custom-checker-cpp-installed').toggle(use_custom_cpp);
             }
 
             function swap_row($a, $b) {
@@ -111,6 +124,7 @@
 
             checker_precision($('#id_problem-data-checker'));
             $('#id_problem-data-checker').change(toggle_custom_checker_upload);
+            $('#id_problem-data-checker_type').change(toggle_custom_checker_upload);
             toggle_custom_checker_upload();
 
             $table.on('add-row', function (e, $tr) {
@@ -444,10 +458,18 @@
     <form action="" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
         {{ cases_formset.management_form }}
-        {% if custom_checker_exists %}
-            <p id="custom-checker-installed" style="display: none">
-                {{ _('Custom checker installed:') }} <code>checker.py</code>
+        {% if custom_checker_py_exists %}
+            <p id="custom-checker-py-installed" style="display: none">
+                {{ _('Custom Python checker installed:') }} <code>checker.py</code>
                 <a class="button" href="{{ url('problem_data_file', problem.code, 'checker.py') }}">
+                    <i class="fa fa-download"></i> {{ _('Download checker') }}
+                </a>
+            </p>
+        {% endif %}
+        {% if custom_checker_cpp_exists %}
+            <p id="custom-checker-cpp-installed" style="display: none">
+                {{ _('Custom C++ checker installed:') }} <code>checker.cpp</code>
+                <a class="button" href="{{ url('problem_data_file', problem.code, 'checker.cpp') }}">
                     <i class="fa fa-download"></i> {{ _('Download checker') }}
                 </a>
             </p>
