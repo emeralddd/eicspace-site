@@ -109,6 +109,10 @@
                 $('#id_problem-data-output_name').closest('tr').toggle(use_custom_cpp && custom_type === 'themis');
                 $('#custom-checker-py-installed').toggle(use_custom_python);
                 $('#custom-checker-cpp-installed').toggle(use_custom_cpp);
+
+                var is_interactive = $('#id_problem-data-is_interactive').is(':checked');
+                $('#id_problem-data-interactor_file').closest('tr').toggle(is_interactive);
+                $('#interactor-installed').toggle(is_interactive);
             }
 
             function swap_row($a, $b) {
@@ -125,6 +129,7 @@
             checker_precision($('#id_problem-data-checker'));
             $('#id_problem-data-checker').change(toggle_custom_checker_upload);
             $('#id_problem-data-checker_type').change(toggle_custom_checker_upload);
+            $('#id_problem-data-is_interactive').change(toggle_custom_checker_upload);
             toggle_custom_checker_upload();
 
             $table.on('add-row', function (e, $tr) {
@@ -471,6 +476,14 @@
                 {{ _('Custom C++ checker installed:') }} <code>checker.cpp</code>
                 <a class="button" href="{{ url('problem_data_file', problem.code, 'checker.cpp') }}">
                     <i class="fa fa-download"></i> {{ _('Download checker') }}
+                </a>
+            </p>
+        {% endif %}
+        {% if interactor_exists %}
+            <p id="interactor-installed" style="display: none">
+                {{ _('Testlib interactor installed:') }} <code>interactor.cpp</code>
+                <a class="button" href="{{ url('problem_data_file', problem.code, 'interactor.cpp') }}">
+                    <i class="fa fa-download"></i> {{ _('Download interactor') }}
                 </a>
             </p>
         {% endif %}

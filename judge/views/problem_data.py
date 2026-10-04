@@ -9,8 +9,8 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.forms import BaseModelFormSet, CharField, ChoiceField, FileField, HiddenInput, ModelForm, NumberInput, \
-    Select, formset_factory
+from django.forms import BaseModelFormSet, BooleanField, CharField, ChoiceField, FileField, HiddenInput, ModelForm, \
+    NumberInput, Select, formset_factory
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -49,6 +49,12 @@ class ProblemDataForm(ModelForm):
         help_text=_('Upload a checker source file for the selected custom checker.'),
         required=False,
     )
+    is_interactive = BooleanField(label=_('Is Interactive'), required=False)
+    interactor_file = FileField(
+        label=_('Interactor source file'),
+        help_text=_('Upload a C++ testlib interactor (.cc, .cpp, or .cxx). It will be saved as interactor.cpp.'),
+        required=False,
+    )
     checker_type = ChoiceField(
         label=_('Custom checker type'),
         choices=(
@@ -70,9 +76,14 @@ class ProblemDataForm(ModelForm):
         self.fields['checker'].choices = choices
         self.order_fields([
             'zipfile', 'generator', 'unicode', 'nobigmath', 'output_limit', 'output_prefix',
-            'checker', 'checker_type', 'input_name', 'output_name', 'checker_file', 'checker_args',
+            'checker', 'checker_type', 'input_name', 'output_name', 'checker_file',
+            'is_interactive', 'interactor_file', 'checker_args',
         ])
         if not self.is_bound and self.instance.pk:
+            self.initial['is_interactive'] = problem_data_storage.exists(
+                os.path.join(self.instance.problem.code, 'interactor.cpp'),
+            )
+            self.fields['interactor_file'].widget.attrs['accept'] = '.cc,.cpp,.cxx'
             checker_py_exists = problem_data_storage.exists(
                 os.path.join(self.instance.problem.code, 'checker.py'),
             )
@@ -99,8 +110,10 @@ class ProblemDataForm(ModelForm):
     def clean(self):
         cleaned_data = super(ProblemDataForm, self).clean()
         checker_file = cleaned_data.get('checker_file')
+        interactor_file = cleaned_data.get('interactor_file')
         checker = cleaned_data.get('checker')
         self.selected_checker = checker
+        self.use_interactive = cleaned_data.get('is_interactive', False)
         if checker == CUSTOM_CHECKER_PY:
             if not checker_file and not problem_data_storage.exists(
                 os.path.join(self.instance.problem.code, 'checker.py'),
@@ -115,8 +128,8 @@ class ProblemDataForm(ModelForm):
                 os.path.join(self.instance.problem.code, 'checker.cpp'),
             ):
                 self.add_error('checker_file', _('Upload a C++ checker file to use the custom checker.'))
-            if checker_file and not checker_file.name.lower().endswith(('.cc', '.cpp', '.cxx')):
-                self.add_error('checker_file', _('C++ checker files must end in .cc, .cpp, or .cxx.'))
+            if checker_file and not checker_file.name.lower().endswith(('.cc', '.cpp', '.c')):
+                self.add_error('checker_file', _('C++ checker files must end in .cc, .cpp, or .c.'))
 
             checker_type = cleaned_data.get('checker_type')
             checker_args = {}
@@ -150,6 +163,15 @@ class ProblemDataForm(ModelForm):
                 parsed_checker_args = {}
             if parsed_checker_args.get('files') == 'checker.cpp':
                 cleaned_data['checker_args'] = ''
+
+        interactor_path = os.path.join(self.instance.problem.code, 'interactor.cpp')
+        if self.use_interactive:
+            if not interactor_file and not problem_data_storage.exists(interactor_path):
+                self.add_error('interactor_file', _('Upload a C++ testlib interactor to enable interactive judging.'))
+            if interactor_file and not interactor_file.name.lower().endswith(('.cc', '.cpp', '.c')):
+                self.add_error('interactor_file', _('Interactor files must end in .cc, .cpp, or .c.'))
+        elif interactor_file:
+            self.add_error('interactor_file', _('Enable Is Interactive before uploading an interactor.'))
         return cleaned_data
 
     def clean_zipfile(self):
@@ -174,7 +196,8 @@ class ProblemDataForm(ModelForm):
     class Meta:
         model = ProblemData
         fields = ['zipfile', 'generator', 'unicode', 'nobigmath', 'output_limit', 'output_prefix',
-                  'checker', 'checker_type', 'input_name', 'output_name', 'checker_file', 'checker_args']
+                  'checker', 'checker_type', 'input_name', 'output_name', 'checker_file',
+                  'is_interactive', 'interactor_file', 'checker_args']
         widgets = {
             'checker_args': HiddenInput,
         }
@@ -308,6 +331,9 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
         context['custom_checker_cpp_exists'] = problem_data_storage.exists(
             os.path.join(self.object.code, 'checker.cpp'),
         )
+        context['interactor_exists'] = problem_data_storage.exists(
+            os.path.join(self.object.code, 'interactor.cpp'),
+        )
         context['valid_files'] = set(valid_files)
         context['valid_files_json'] = mark_safe(json.dumps(valid_files))
 
@@ -342,6 +368,13 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
 
             if checker_file and checker_path:
                 problem_data_storage.save(checker_path, checker_file)
+            interactor_path = os.path.join(problem.code, 'interactor.cpp')
+            interactor_file = data_form.cleaned_data['interactor_file']
+            if data_form.use_interactive:
+                if interactor_file:
+                    problem_data_storage.save(interactor_path, interactor_file)
+            else:
+                problem_data_storage.delete(interactor_path)
             for case in cases_formset.save(commit=False):
                 case.dataset_id = problem.id
                 case.save()

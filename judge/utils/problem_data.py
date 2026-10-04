@@ -57,6 +57,7 @@ class ProblemDataCompiler(object):
     def make_init(self):
         from judge.models import problem_data_storage
 
+        is_interactive = problem_data_storage.exists(os.path.join(self.problem.code, 'interactor.cpp'))
         cases = []
         batch = None
         batch_count = 0
@@ -90,7 +91,11 @@ class ProblemDataCompiler(object):
                     if case.input_file not in self.files:
                         raise ProblemDataError(_('Input file for case %d does not exist: %s') %
                                                (i, case.input_file))
-                    if case.output_file not in self.files:
+                    if case.output_file:
+                        if case.output_file not in self.files:
+                            raise ProblemDataError(_('Output file for case %d does not exist: %s') %
+                                                   (i, case.output_file))
+                    elif not is_interactive:
                         raise ProblemDataError(_('Output file for case %d does not exist: %s') %
                                                (i, case.output_file))
 
@@ -205,6 +210,12 @@ class ProblemDataCompiler(object):
             hints.append('unicode')
         if self.data.nobigmath:
             hints.append('nobigmath')
+        if is_interactive:
+            init['interactive'] = {
+                'files': 'interactor.cpp',
+                'lang': 'CPP17',
+                'type': 'testlib',
+            }
         if problem_data_storage.exists(os.path.join(self.problem.code, 'checker.cpp')):
             init['checker'] = {
                 'name': 'bridged',
