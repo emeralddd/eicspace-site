@@ -228,6 +228,10 @@
                         $tr.find('select[id$=type]').val('C').trigger('change');
                     }
 
+                    var $points = $tr.find('input[id$=points]');
+                    if (!$points.val())
+                        $points.val(1);
+
                     $tr.find('input[name$="DELETE"]').prop('checked', false);
                     $tr.find('select[id$=input_file]').val(file).trigger('change');
                     // Delete old output file if it exists, so that we can autofill the new one
