@@ -92,6 +92,12 @@
                 }).change();
             }
 
+            function toggle_custom_checker_upload() {
+                var use_custom_checker = $('#id_problem-data-checker').val() === 'custom_py';
+                $('#id_problem-data-checker_file').closest('tr').toggle(use_custom_checker);
+                $('#custom-checker-installed').toggle(use_custom_checker);
+            }
+
             function swap_row($a, $b) {
                 var $a_order = $a.find('input[id$=order]'), $b_order = $b.find('input[id$=order]');
                 var order = $a_order.val();
@@ -104,6 +110,8 @@
             }
 
             checker_precision($('#id_problem-data-checker'));
+            $('#id_problem-data-checker').change(toggle_custom_checker_upload);
+            toggle_custom_checker_upload();
 
             $table.on('add-row', function (e, $tr) {
                 var $order = $tr.find('input').filter('[id$=order]').attr('type', 'hidden').val(++order);
@@ -436,6 +444,11 @@
     <form action="" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
         {{ cases_formset.management_form }}
+        {% if custom_checker_exists %}
+            <p id="custom-checker-installed" style="display: none">
+                {{ _('Custom checker installed:') }} <code>checker.py</code>
+            </p>
+        {% endif %}
         <table class="table">{{ data_form.as_table() }}</table>
         <div id="column-visible" data-problem="{{ problem.code }}">
             <strong>{{ _('Show columns:') }}</strong>

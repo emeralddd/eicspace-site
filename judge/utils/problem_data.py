@@ -55,6 +55,8 @@ class ProblemDataCompiler(object):
         self.generator = data.generator
 
     def make_init(self):
+        from judge.models import problem_data_storage
+
         cases = []
         batch = None
         batch_count = 0
@@ -64,13 +66,14 @@ class ProblemDataCompiler(object):
                 raise ProblemDataError(_('Empty batches not allowed.'))
             cases.append(batch)
 
-        def make_checker(case):
+        def make_checker(case, name=None):
+            name = name or case.checker
             if case.checker_args:
                 return {
-                    'name': case.checker,
+                    'name': name,
                     'args': json.loads(case.checker_args),
                 }
-            return case.checker
+            return name
 
         for i, case in enumerate(self.cases, 1):
             if case.type == 'C':
@@ -202,7 +205,9 @@ class ProblemDataCompiler(object):
             hints.append('unicode')
         if self.data.nobigmath:
             hints.append('nobigmath')
-        if self.data.checker:
+        if problem_data_storage.exists(os.path.join(self.problem.code, 'checker.py')):
+            init['checker'] = make_checker(self.data, 'checker.py')
+        elif self.data.checker:
             init['checker'] = make_checker(self.data)
         else:
             self.data.checker_args = ''

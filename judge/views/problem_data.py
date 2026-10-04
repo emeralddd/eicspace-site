@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.forms import BaseModelFormSet, HiddenInput, ModelForm, NumberInput, Select, formset_factory
+from django.forms import BaseModelFormSet, FileField, HiddenInput, ModelForm, NumberInput, Select, formset_factory
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -28,6 +28,8 @@ from judge.views.problem import ProblemMixin
 mimetypes.init()
 mimetypes.add_type('application/x-yaml', '.yml')
 
+CUSTOM_CHECKER = 'custom_py'
+
 
 def checker_args_cleaner(self):
     data = self.cleaned_data['checker_args']
@@ -42,6 +44,40 @@ def checker_args_cleaner(self):
 
 
 class ProblemDataForm(ModelForm):
+    checker_file = FileField(
+        label=_('Custom checker file'),
+        help_text=_('Upload a Python checker module (.py). It will be saved as checker.py.'),
+        required=False,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super(ProblemDataForm, self).__init__(*args, **kwargs)
+        choices = list(self.fields['checker'].choices)
+        choices.append((CUSTOM_CHECKER, _('Custom checker (PY)')))
+        self.fields['checker'].choices = choices
+        self.fields['checker_file'].widget.attrs['accept'] = '.py'
+        if not self.is_bound and self.instance.pk and problem_data_storage.exists(
+            os.path.join(self.instance.problem.code, 'checker.py'),
+        ):
+            self.initial['checker'] = CUSTOM_CHECKER
+
+    def clean(self):
+        cleaned_data = super(ProblemDataForm, self).clean()
+        checker_file = cleaned_data.get('checker_file')
+        use_custom_checker = cleaned_data.get('checker') == CUSTOM_CHECKER
+        self.use_custom_checker = use_custom_checker
+
+        if use_custom_checker:
+            checker_exists = problem_data_storage.exists(
+                os.path.join(self.instance.problem.code, 'checker.py'),
+            )
+            if not checker_file and not checker_exists:
+                self.add_error('checker_file', _('Upload a Python checker file to use the custom checker.'))
+            cleaned_data['checker'] = 'standard'
+        elif checker_file:
+            self.add_error('checker_file', _('Select Custom checker (PY) before uploading a checker file.'))
+        return cleaned_data
+
     def clean_zipfile(self):
         if hasattr(self, 'zip_valid') and not self.zip_valid:
             raise ValidationError(_('Your zip file is invalid!'))
@@ -58,6 +94,12 @@ class ProblemDataForm(ModelForm):
             raise ValidationError(_('Generators must not be named init.yml.'))
 
         return generator
+
+    def clean_checker_file(self):
+        checker_file = self.cleaned_data['checker_file']
+        if checker_file and not checker_file.name.lower().endswith('.py'):
+            raise ValidationError(_('Custom checker files must be Python files ending in .py.'))
+        return checker_file
 
     clean_checker_args = checker_args_cleaner
 
@@ -192,6 +234,9 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
                 valid_files = self.get_valid_files(context['data_form'].instance)
             except BadZipfile:
                 pass
+        context['custom_checker_exists'] = problem_data_storage.exists(
+            os.path.join(self.object.code, 'checker.py'),
+        )
         context['valid_files'] = set(valid_files)
         context['valid_files_json'] = mark_safe(json.dumps(valid_files))
 
@@ -212,6 +257,12 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
         cases_formset = self.get_case_formset(valid_files, post=True)
         if data_form.is_valid() and cases_formset.is_valid():
             data = data_form.save()
+            checker_path = os.path.join(problem.code, 'checker.py')
+            checker_file = data_form.cleaned_data['checker_file']
+            if data_form.use_custom_checker and checker_file:
+                problem_data_storage.save(checker_path, checker_file)
+            elif not data_form.use_custom_checker:
+                problem_data_storage.delete(checker_path)
             for case in cases_formset.save(commit=False):
                 case.dataset_id = problem.id
                 case.save()
