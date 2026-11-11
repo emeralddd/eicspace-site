@@ -114,7 +114,7 @@ class Problem(models.Model):
         (SubmissionSourceAccess.ONLY_OWN, _('Only own submissions')),
     )
 
-    code = models.CharField(max_length=20, verbose_name=_('problem code'), unique=True,
+    code = models.CharField(max_length=40, verbose_name=_('problem code'), unique=True,
                             validators=[RegexValidator('^[a-z0-9]+$', _('Problem code must be ^[a-z0-9]+$'))],
                             help_text=_('A short, unique code for the problem, used in the URL after /problem/'))
     name = models.CharField(max_length=100, verbose_name=_('problem name'), db_index=True,
